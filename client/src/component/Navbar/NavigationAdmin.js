@@ -7,11 +7,9 @@ export default function NavbarAdmin() {
   const [open, setOpen] = useState(false);
   return (
     <nav>
-      <div className="header">
-        <NavLink to="/">
-          <i className="fab fa-hive" /> Admin
-        </NavLink>
-      </div>
+      <NavLink to="/" className="header">
+              <i className="fab fa-hive"></i> Admin
+      </NavLink>
       <ul
         className="navbar-links"
         style={{ transform: open ? "translateX(0px)" : "" }}

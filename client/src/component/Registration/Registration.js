@@ -179,7 +179,7 @@ export default class Registration extends Component {
                       <input
                         className={"input-r"}
                         type="text"
-                        placeholder="eg. Ava"
+                        placeholder="eg. Tom"
                         value={this.state.voterName}
                         onChange={this.updateVoterName}
                       />{" "}
@@ -191,14 +191,14 @@ export default class Registration extends Component {
                       <input
                         className={"input-r"}
                         type="number"
-                        placeholder="eg. 9841234567"
+                        placeholder="eg. 9800000000"
                         value={this.state.voterPhone}
                         onChange={this.updateVoterPhone}
                       />
                     </label>
                   </div>
                   <p className="note">
-                    <span style={{ color: "tomato" }}> Note: </span>
+                    <span style={{ color: "#000000" }}> Note: </span>
                     <br /> Make sure your account address and Phone number are
                     correct. <br /> Admin might not approve your account if the
                     provided Phone number nub does not matches the account

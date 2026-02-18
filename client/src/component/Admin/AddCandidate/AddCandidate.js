@@ -130,7 +130,7 @@ export default class AddCandidate extends Component {
                 <input
                   className={"input-ac"}
                   type="text"
-                  placeholder="eg. Marcus"
+                  placeholder="eg. tom"
                   value={this.state.header}
                   onChange={this.updateHeader}
                 />

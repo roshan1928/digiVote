@@ -4,6 +4,7 @@
   box-sizing: border-box;
   font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
+
 h1 {
   text-align: center;
 }
@@ -102,7 +103,7 @@ code {
   background-color: #ddffff;
 }
 .attention {
-  background-color: #fffbdd;
+  background-color: #ddffff;
 }
 .success {
   background-color: #ddffdd;

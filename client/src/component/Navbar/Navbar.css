@@ -6,12 +6,12 @@ li {
 }
 a {
   text-decoration: none;
-  color: white;
+  color: #CBD5E1;
 }
 nav {
   display: flex;
   height: 11vh;
-  background: tomato;
+  background: #0F172A;
   justify-content: space-around;
   position: sticky;
   top: 0;
@@ -21,6 +21,7 @@ nav .header {
   font-size: 24px;
   font-weight: bold;
   text-transform: uppercase;
+  color : #22D3EE;
 }
 nav .header:hover {
   cursor: pointer;
@@ -39,7 +40,7 @@ nav .navbar-links a {
 }
 nav .navbar-links a:hover {
   cursor: pointer;
-  color: black;
+  color: #22D3EE;
 }
 nav .burger-menu {
   font-size: 24px;
@@ -48,7 +49,7 @@ nav .burger-menu {
   display: none;
 }
 .nav-active {
-  color: black;
+  color: #22D3EE;
 }
 
 @media all and (max-width: 777px) {
@@ -56,7 +57,7 @@ nav .burger-menu {
     display: block;
   }
   nav .navbar-links {
-    background-color: tomato;
+    background-color: #0F172A;
     display: block;
     width: 50%;
     position: absolute;

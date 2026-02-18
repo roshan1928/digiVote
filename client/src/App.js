@@ -1,22 +1,51 @@
 import React, { Component } from "react";
 import { BrowserRouter as Router, Switch, Route, Link } from "react-router-dom";
 
-import Home from "./component/Home";
+import Election from "./contracts/Election.json"; // Replace with your actual contract JSON
+import getWeb3 from "./getWeb3";
 
+import Home from "./component/Home";
 import Voting from "./component/Voting/Voting";
 import Results from "./component/Results/Results";
 import Registration from "./component/Registration/Registration";
-
 import AddCandidate from "./component/Admin/AddCandidate/AddCandidate";
 import Verification from "./component/Admin/Verification/Verification";
 import test from "./component/test";
-// import StartEnd from "./component/Admin/StartEnd/StartEnd";
-
 import Footer from "./component/Footer/Footer";
 
 import "./App.css";
 
 export default class App extends Component {
+  state = { web3: null, accounts: null, contract: null, networkId: null };
+
+  async componentDidMount() {
+    try {
+      const web3 = await getWeb3();
+      const accounts = await web3.eth.getAccounts();
+      const networkId = await web3.eth.net.getId();
+      const deployedNetwork = Election.networks[networkId];
+
+      if (!deployedNetwork) {
+        alert("Smart contract not deployed to the detected network.");
+        return;
+      }
+
+      const contract = new web3.eth.Contract(
+        Election.abi,
+        deployedNetwork.address
+      );
+
+      console.log("✅ Web3 loaded");
+      console.log("Detected Network ID:", networkId);
+      console.log("Available networks in contract:", Object.keys(Election.networks));
+
+      this.setState({ web3, accounts, contract, networkId });
+    } catch (error) {
+      alert("⚠️ Failed to load Web3, accounts, or contract. Check console for details.");
+      console.error(error);
+    }
+  }
+
   render() {
     return (
       <div className="App">
@@ -37,6 +66,7 @@ export default class App extends Component {
     );
   }
 }
+
 class NotFound extends Component {
   render() {
     return (
@@ -44,7 +74,7 @@ class NotFound extends Component {
         <h1>404 NOT FOUND!</h1>
         <center>
           <p>
-            The page your are looking for doesn't exist.
+            The page you are looking for doesn't exist.
             <br />
             Go to{" "}
             <Link
