@@ -22,78 +22,85 @@ export default class Voting extends Component {
       account: null,
       web3: null,
       isAdmin: false,
-      candidateCount: undefined,
+
+      candidateCount: 0,
       candidates: [],
+
       isElStarted: false,
       isElEnded: false,
+
       currentVoter: {
         address: undefined,
-        name: null,
-        phone: null,
+        name: "",
+        phone: "",
         hasVoted: false,
         isVerified: false,
         isRegistered: false,
       },
     };
   }
+
   componentDidMount = async () => {
     // refreshing once
     if (!window.location.hash) {
       window.location = window.location + "#loaded";
       window.location.reload();
     }
-    try {
-      // Get network provider and web3 instance.
-      const web3 = await getWeb3();
 
-      // Use web3 to get the user's accounts.
+    try {
+      const web3 = await getWeb3();
       const accounts = await web3.eth.getAccounts();
 
-      // Get the contract instance.
       const networkId = await web3.eth.net.getId();
       const deployedNetwork = Election.networks[networkId];
+
+      if (!deployedNetwork) {
+        alert("Smart contract not deployed to the detected network.");
+        return;
+      }
+
       const instance = new web3.eth.Contract(
         Election.abi,
-        deployedNetwork && deployedNetwork.address
+        deployedNetwork.address
       );
 
-      // Set web3, accounts, and contract to the state, and then proceed with an
-      // example of interacting with the contract's methods.
       this.setState({
-        web3: web3,
+        web3,
         ElectionInstance: instance,
         account: accounts[0],
       });
 
-      // Get total number of candidates
-      const candidateCount = await this.state.ElectionInstance.methods
-        .getTotalCandidate()
-        .call();
-      this.setState({ candidateCount: candidateCount });
+      // ✅ NEW ABI
+      const candidateCount = await instance.methods.candidateCount().call();
+      const start = await instance.methods.start().call();
+      const end = await instance.methods.end().call();
+      const admin = await instance.methods.admin().call();
 
-      // Get start and end values
-      const start = await this.state.ElectionInstance.methods.getStart().call();
-      this.setState({ isElStarted: start });
-      const end = await this.state.ElectionInstance.methods.getEnd().call();
-      this.setState({ isElEnded: end });
+      this.setState({
+        candidateCount: Number(candidateCount),
+        isElStarted: start,
+        isElEnded: end,
+        isAdmin: accounts[0].toLowerCase() === admin.toLowerCase(),
+      });
 
-      // Loading Candidates details
-      for (let i = 1; i <= this.state.candidateCount; i++) {
-        const candidate = await this.state.ElectionInstance.methods
-          .candidateDetails(i - 1)
-          .call();
-        this.state.candidates.push({
-          id: candidate.candidateId,
-          header: candidate.header,
-          slogan: candidate.slogan,
+      // ✅ Load candidates (new fields)
+      const candidates = [];
+      for (let i = 0; i < Number(candidateCount); i++) {
+        const c = await instance.methods.candidateDetails(i).call();
+        candidates.push({
+          id: Number(c.candidateId),
+          name: c.name,
+          party: c.party,
+          symbol: c.symbol, // e.g. "tree.png"
+          age: Number(c.age),
+          gender: c.gender,
+          region: c.region,
         });
       }
-      this.setState({ candidates: this.state.candidates });
+      this.setState({ candidates });
 
-      // Loading current voter
-      const voter = await this.state.ElectionInstance.methods
-        .voterDetails(this.state.account)
-        .call();
+      // ✅ Load current voter (same struct)
+      const voter = await instance.methods.voterDetails(accounts[0]).call();
       this.setState({
         currentVoter: {
           address: voter.voterAddress,
@@ -104,53 +111,82 @@ export default class Voting extends Component {
           isRegistered: voter.isRegistered,
         },
       });
-
-      // Admin account and verification
-      const admin = await this.state.ElectionInstance.methods.getAdmin().call();
-      if (this.state.account === admin) {
-        this.setState({ isAdmin: true });
-      }
     } catch (error) {
-      // Catch any errors for any of the above operations.
-      alert(
-        `Failed to load web3, accounts, or contract. Check console for details.`
-      );
+      alert("Failed to load web3, accounts, or contract. Check console.");
       console.error(error);
     }
   };
 
-  renderCandidates = (candidate) => {
-    const castVote = async (id) => {
+  castVote = async (id) => {
+    try {
       await this.state.ElectionInstance.methods
         .vote(id)
         .send({ from: this.state.account, gas: 1000000 });
       window.location.reload();
-    };
-    const confirmVote = (id, header) => {
-      var r = window.confirm(
-        "Vote for " + header + " with Id " + id + ".\nAre you sure?"
-      );
-      if (r === true) {
-        castVote(id);
-      }
-    };
+    } catch (err) {
+      console.error(err);
+      alert("Vote failed. Check console.");
+    }
+  };
+
+  confirmVote = (id, name) => {
+    const r = window.confirm(`Vote for ${name} (ID ${id})?\nAre you sure?`);
+    if (r === true) {
+      this.castVote(id);
+    }
+  };
+
+  renderCandidates = (candidate) => {
+    const disabled =
+      !this.state.currentVoter.isRegistered ||
+      !this.state.currentVoter.isVerified ||
+      this.state.currentVoter.hasVoted;
+
+    // Optional: show symbol image if you store PNG names like "tree.png"
+    // Put your images in: client/src/assets/symbols/
+    let symbolImg = null;
+    try {
+      symbolImg = candidate.symbol
+        ? require(`../../assets/symbols/${candidate.symbol}`)
+        : null;
+    } catch (e) {
+      symbolImg = null; // if image not found, just ignore
+    }
+
     return (
-      <div className="container-item">
+      <div className="container-item" key={candidate.id}>
         <div className="candidate-info">
           <h2>
-            {candidate.header} <small>#{candidate.id}</small>
+            {candidate.name} <small>#{candidate.id}</small>
           </h2>
-          <p className="slogan">{candidate.slogan}</p>
+          <p className="slogan">
+            <strong>Party:</strong> {candidate.party} <br />
+            <strong>Region:</strong> {candidate.region} <br />
+            <strong>Gender/Age:</strong> {candidate.gender}, {candidate.age}
+          </p>
+
+          {symbolImg ? (
+            <div style={{ marginTop: "8px" }}>
+              <strong>Symbol: </strong>
+              <img
+                src={symbolImg}
+                alt="symbol"
+                style={{ width: "55px", height: "55px", objectFit: "contain" }}
+              />
+              <small style={{ marginLeft: "10px" }}>{candidate.symbol}</small>
+            </div>
+          ) : (
+            <p style={{ marginTop: "8px" }}>
+              <strong>Symbol:</strong> {candidate.symbol || "N/A"}
+            </p>
+          )}
         </div>
+
         <div className="vote-btn-container">
           <button
-            onClick={() => confirmVote(candidate.id, candidate.header)}
+            onClick={() => this.confirmVote(candidate.id, candidate.name)}
             className="vote-bth"
-            disabled={
-              !this.state.currentVoter.isRegistered ||
-              !this.state.currentVoter.isVerified ||
-              this.state.currentVoter.hasVoted
-            }
+            disabled={disabled}
           >
             Vote
           </button>
@@ -172,25 +208,24 @@ export default class Voting extends Component {
     return (
       <>
         {this.state.isAdmin ? <NavbarAdmin /> : <Navbar />}
+
         <div>
           {!this.state.isElStarted && !this.state.isElEnded ? (
             <NotInit />
           ) : this.state.isElStarted && !this.state.isElEnded ? (
             <>
+              {/* Status box */}
               {this.state.currentVoter.isRegistered ? (
                 this.state.currentVoter.isVerified ? (
                   this.state.currentVoter.hasVoted ? (
                     <div className="container-item success">
                       <div>
-                        <strong>You've casted your vote.</strong>
+                        <strong>You have cast your vote.</strong>
                         <p />
                         <center>
                           <Link
                             to="/Results"
-                            style={{
-                              color: "black",
-                              textDecoration: "underline",
-                            }}
+                            style={{ color: "black", textDecoration: "underline" }}
                           >
                             See Results
                           </Link>
@@ -204,39 +239,37 @@ export default class Voting extends Component {
                   )
                 ) : (
                   <div className="container-item attention">
-                    <center>Please wait for admin to verify.</center>
+                    <center>Please wait for admin verification.</center>
                   </div>
                 )
               ) : (
-                <>
-                  <div className="container-item attention">
-                    <center>
-                      <p>You're not registered. Please register first.</p>
-                      <br />
-                      <Link
-                        to="/Registration"
-                        style={{ color: "black", textDecoration: "underline" }}
-                      >
-                        Registration Page
-                      </Link>
-                    </center>
-                  </div>
-                </>
+                <div className="container-item attention">
+                  <center>
+                    <p>You are not registered. Please register first.</p>
+                    <br />
+                    <Link
+                      to="/Registration"
+                      style={{ color: "black", textDecoration: "underline" }}
+                    >
+                      Registration Page
+                    </Link>
+                  </center>
+                </div>
               )}
+
+              {/* Candidate list */}
               <div className="container-main">
                 <h2>Candidates</h2>
                 <small>Total candidates: {this.state.candidates.length}</small>
+
                 {this.state.candidates.length < 1 ? (
                   <div className="container-item attention">
-                    <center>Not one to vote for.</center>
+                    <center>No candidates found.</center>
                   </div>
                 ) : (
                   <>
                     {this.state.candidates.map(this.renderCandidates)}
-                    <div
-                      className="container-item"
-                      style={{ border: "1px solid black" }}
-                    >
+                    <div className="container-item" style={{ border: "1px solid black" }}>
                       <center>That is all.</center>
                     </div>
                   </>
@@ -244,20 +277,18 @@ export default class Voting extends Component {
               </div>
             </>
           ) : !this.state.isElStarted && this.state.isElEnded ? (
-            <>
-              <div className="container-item attention">
-                <center>
-                  <h3>The Election ended.</h3>
-                  <br />
-                  <Link
-                    to="/Results"
-                    style={{ color: "black", textDecoration: "underline" }}
-                  >
-                    See results
-                  </Link>
-                </center>
-              </div>
-            </>
+            <div className="container-item attention">
+              <center>
+                <h3>The Election ended.</h3>
+                <br />
+                <Link
+                  to="/Results"
+                  style={{ color: "black", textDecoration: "underline" }}
+                >
+                  See results
+                </Link>
+              </center>
+            </div>
           ) : null}
         </div>
       </>

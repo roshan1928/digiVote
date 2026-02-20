@@ -27,76 +27,87 @@ export default class Home extends Component {
       isAdmin: false,
       elStarted: false,
       elEnded: false,
-      elDetails: {},
+      elDetails: {
+        adminName: "",
+        adminEmail: "",
+        adminTitle: "",
+        electionTitle: "",
+        organizationTitle: "",
+      },
     };
   }
 
   componentDidMount = async () => {
     try {
-      // ✅ Connect to MetaMask
-      if (window.ethereum) {
-        const web3 = new Web3(window.ethereum);
-        await window.ethereum.request({ method: "eth_requestAccounts" });
-
-        const accounts = await web3.eth.getAccounts();
-        const networkId = await web3.eth.net.getId();
-        const deployedNetwork = Election.networks[networkId];
-
-        // ✅ Check if contract is deployed on this network
-        if (!deployedNetwork) {
-          alert("Smart contract not deployed to the detected network.");
-          return;
-        }
-
-        const electionInstance = new web3.eth.Contract(
-          Election.abi,
-          deployedNetwork.address
-        );
-
-        this.setState({
-          web3,
-          ElectionInstance: electionInstance,
-          account: accounts[0],
-        });
-
-        // ✅ Check if current account is admin
-        const admin = await electionInstance.methods.getAdmin().call();
-        if (accounts[0].toLowerCase() === admin.toLowerCase()) {
-          this.setState({ isAdmin: true });
-        }
-
-        // ✅ Get election details
-        const start = await electionInstance.methods.getStart().call();
-        const end = await electionInstance.methods.getEnd().call();
-        const electionDetails = await electionInstance.methods
-          .getElectionDetails()
-          .call();
-
-        this.setState({
-          elStarted: start,
-          elEnded: end,
-          elDetails: {
-            adminName: electionDetails.adminName,
-            adminEmail: electionDetails.adminEmail,
-            adminTitle: electionDetails.adminTitle,
-            electionTitle: electionDetails.electionTitle,
-            organizationTitle: electionDetails.organizationTitle,
-          },
-        });
-
-        // ✅ Handle MetaMask account/network changes dynamically
-        window.ethereum.on("accountsChanged", () => window.location.reload());
-        window.ethereum.on("chainChanged", () => window.location.reload());
-      } else {
+      if (!window.ethereum) {
         alert("Please install MetaMask to use this DApp!");
+        return;
       }
+
+      // ✅ Connect to MetaMask
+      const web3 = new Web3(window.ethereum);
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+
+      const accounts = await web3.eth.getAccounts();
+      const networkId = await web3.eth.net.getId();
+      const deployedNetwork = Election.networks[networkId];
+
+      // ✅ Check if contract is deployed on this network
+      if (!deployedNetwork) {
+        alert("Smart contract not deployed to the detected network.");
+        return;
+      }
+
+      const electionInstance = new web3.eth.Contract(
+        Election.abi,
+        deployedNetwork.address
+      );
+
+      this.setState({
+        web3,
+        ElectionInstance: electionInstance,
+        account: accounts[0],
+      });
+
+      // ✅ Check if current account is admin (NEW ABI)
+      const admin = await electionInstance.methods.admin().call();
+      if (accounts[0].toLowerCase() === admin.toLowerCase()) {
+        this.setState({ isAdmin: true });
+      }
+
+      // ✅ Get election start/end (NEW ABI)
+      const start = await electionInstance.methods.start().call();
+      const end = await electionInstance.methods.end().call();
+
+      // ✅ Get election name/description (NEW ABI)
+      const electionName = await electionInstance.methods.electionName().call();
+      const electionDescription = await electionInstance.methods
+        .electionDescription()
+        .call();
+
+      // Map to your existing UI fields
+      this.setState({
+        elStarted: start,
+        elEnded: end,
+        elDetails: {
+          adminName: "", // no longer stored on-chain
+          adminEmail: "", // no longer stored on-chain
+          adminTitle: "", // no longer stored on-chain
+          electionTitle: electionName || "",
+          organizationTitle: electionDescription || "",
+        },
+      });
+
+      // ✅ Handle MetaMask changes
+      window.ethereum.on("accountsChanged", () => window.location.reload());
+      window.ethereum.on("chainChanged", () => window.location.reload());
     } catch (error) {
       console.error(error);
       alert("Error connecting to blockchain. See console for details.");
     }
   };
 
-  // ✅ End election
+  // ✅ End election (still exists)
   endElection = async () => {
     try {
       await this.state.ElectionInstance.methods
@@ -109,22 +120,31 @@ export default class Home extends Component {
     }
   };
 
-  // ✅ Register election
+  // ✅ Register + Start election (NEW contract functions)
   registerElection = async (data) => {
     try {
+      const electionTitle = (data.electionTitle || "").trim();
+      const orgTitle = (data.organizationTitle || "").trim();
+
+      // Build a description from the form (since old fields are not stored on-chain anymore)
+      const description = `Organization: ${orgTitle} | Admin: ${data.adminFName || ""} ${
+        data.adminLName || ""
+      } | Title: ${data.adminTitle || ""} | Email: ${data.adminEmail || ""}`;
+
+      // 1) set name + description
       await this.state.ElectionInstance.methods
-        .setElectionDetails(
-          `${data.adminFName.toLowerCase()} ${data.adminLName.toLowerCase()}`,
-          data.adminEmail.toLowerCase(),
-          data.adminTitle.toLowerCase(),
-          data.electionTitle.toLowerCase(),
-          data.organizationTitle.toLowerCase()
-        )
+        .setElectionInfo(electionTitle, description)
+        .send({ from: this.state.account, gas: 1500000 });
+
+      // 2) start election
+      await this.state.ElectionInstance.methods
+        .startElection()
         .send({ from: this.state.account, gas: 1000000 });
+
       window.location.reload();
     } catch (err) {
       console.error(err);
-      alert("Error registering election");
+      alert("Error registering/starting election");
     }
   };
 
@@ -143,6 +163,7 @@ export default class Home extends Component {
     return (
       <>
         {isAdmin ? <NavbarAdmin /> : <Navbar />}
+
         <div className="container-main">
           <div className="container-item center-items info">
             Your Account: {account}
@@ -151,8 +172,8 @@ export default class Home extends Component {
           {!elStarted && !elEnded && (
             <div className="container-item info">
               <center>
-                <h3>The election has not been initialized.</h3>
-                {isAdmin ? <p>Set up the election.</p> : <p>Please wait...</p>}
+                <h3>The election has not been started.</h3>
+                {isAdmin ? <p>Set up and start the election.</p> : <p>Please wait...</p>}
               </center>
             </div>
           )}
@@ -220,7 +241,10 @@ export default class Home extends Component {
                     </label>
 
                     <label className="label-home">
-                      Email {errors.adminEmail && <EMsg msg={errors.adminEmail.message} />}
+                      Email{" "}
+                      {errors.adminEmail && (
+                        <EMsg msg={errors.adminEmail.message} />
+                      )}
                       <input
                         className="input-home"
                         placeholder="you@example.com"
@@ -235,7 +259,8 @@ export default class Home extends Component {
                     </label>
 
                     <label className="label-home">
-                      Job Title or Position {errors.adminTitle && <EMsg msg="*required" />}
+                      Job Title or Position{" "}
+                      {errors.adminTitle && <EMsg msg="*required" />}
                       <input
                         className="input-home"
                         type="text"
@@ -253,7 +278,7 @@ export default class Home extends Component {
                 <div className="container-item center-items">
                   <div>
                     <label className="label-home">
-                      Election Title {errors.electionTitle && <EMsg msg="*required" />}
+                      Election Name {errors.electionTitle && <EMsg msg="*required" />}
                       <input
                         className="input-home"
                         type="text"
@@ -263,11 +288,12 @@ export default class Home extends Component {
                     </label>
 
                     <label className="label-home">
-                      Organization Name {errors.organizationTitle && <EMsg msg="*required" />}
+                      Organization / Description{" "}
+                      {errors.organizationTitle && <EMsg msg="*required" />}
                       <input
                         className="input-home"
                         type="text"
-                        placeholder="e.g. NEC"
+                        placeholder="e.g. NEC / Department / Details"
                         {...register("organizationTitle", { required: true })}
                       />
                     </label>
@@ -284,6 +310,7 @@ export default class Home extends Component {
             elEnded={this.state.elEnded}
             endElFn={this.endElection}
           />
+
           <ElectionStatus
             elStarted={this.state.elStarted}
             elEnded={this.state.elEnded}

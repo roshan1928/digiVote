@@ -23,14 +23,14 @@ export default class Registration extends Component {
       isAdmin: false,
       isElStarted: false,
       isElEnded: false,
-      voterCount: undefined,
+      voterCount: 0,
       voterName: "",
       voterPhone: "",
       voters: [],
       currentVoter: {
         address: undefined,
-        name: null,
-        phone: null,
+        name: "",
+        phone: "",
         hasVoted: false,
         isVerified: false,
         isRegistered: false,
@@ -38,62 +38,58 @@ export default class Registration extends Component {
     };
   }
 
-  // refreshing once
   componentDidMount = async () => {
+    // refreshing once
     if (!window.location.hash) {
       window.location = window.location + "#loaded";
       window.location.reload();
     }
-    try {
-      // Get network provider and web3 instance.
-      const web3 = await getWeb3();
 
-      // Use web3 to get the user's accounts.
+    try {
+      const web3 = await getWeb3();
       const accounts = await web3.eth.getAccounts();
 
-      // Get the contract instance.
       const networkId = await web3.eth.net.getId();
       const deployedNetwork = Election.networks[networkId];
+
+      if (!deployedNetwork) {
+        alert("Smart contract not deployed to the detected network.");
+        return;
+      }
+
       const instance = new web3.eth.Contract(
         Election.abi,
-        deployedNetwork && deployedNetwork.address
+        deployedNetwork.address
       );
 
-      // Set web3, accounts, and contract to the state, and then proceed with an
-      // example of interacting with the contract's methods.
       this.setState({
         web3: web3,
         ElectionInstance: instance,
         account: accounts[0],
       });
 
-      // Admin account and verification
-      const admin = await this.state.ElectionInstance.methods.getAdmin().call();
-      if (this.state.account === admin) {
+      // ✅ Admin check (NEW ABI)
+      const admin = await instance.methods.admin().call();
+      if (accounts[0].toLowerCase() === admin.toLowerCase()) {
         this.setState({ isAdmin: true });
       }
 
-      // Get start and end values
-      const start = await this.state.ElectionInstance.methods.getStart().call();
-      this.setState({ isElStarted: start });
-      const end = await this.state.ElectionInstance.methods.getEnd().call();
-      this.setState({ isElEnded: end });
+      // ✅ Get start/end (NEW ABI)
+      const start = await instance.methods.start().call();
+      const end = await instance.methods.end().call();
+      this.setState({ isElStarted: start, isElEnded: end });
 
-      // Total number of voters
-      const voterCount = await this.state.ElectionInstance.methods
-        .getTotalVoter()
-        .call();
-      this.setState({ voterCount: voterCount });
+      // ✅ Total voters (NEW ABI)
+      const voterCount = await instance.methods.voterCount().call();
+      this.setState({ voterCount: Number(voterCount) });
 
-      // Loading all the voters
-      for (let i = 0; i < this.state.voterCount; i++) {
-        const voterAddress = await this.state.ElectionInstance.methods
-          .voters(i)
-          .call();
-        const voter = await this.state.ElectionInstance.methods
-          .voterDetails(voterAddress)
-          .call();
-        this.state.voters.push({
+      // ✅ Load all voters
+      const voters = [];
+      for (let i = 0; i < Number(voterCount); i++) {
+        const voterAddress = await instance.methods.voters(i).call();
+        const voter = await instance.methods.voterDetails(voterAddress).call();
+
+        voters.push({
           address: voter.voterAddress,
           name: voter.name,
           phone: voter.phone,
@@ -102,42 +98,57 @@ export default class Registration extends Component {
           isRegistered: voter.isRegistered,
         });
       }
-      this.setState({ voters: this.state.voters });
+      this.setState({ voters });
 
-      // Loading current voters
-      const voter = await this.state.ElectionInstance.methods
-        .voterDetails(this.state.account)
-        .call();
+      // ✅ Load current voter
+      const cv = await instance.methods.voterDetails(accounts[0]).call();
       this.setState({
         currentVoter: {
-          address: voter.voterAddress,
-          name: voter.name,
-          phone: voter.phone,
-          hasVoted: voter.hasVoted,
-          isVerified: voter.isVerified,
-          isRegistered: voter.isRegistered,
+          address: cv.voterAddress,
+          name: cv.name,
+          phone: cv.phone,
+          hasVoted: cv.hasVoted,
+          isVerified: cv.isVerified,
+          isRegistered: cv.isRegistered,
         },
       });
+
+      // prefill inputs if already registered
+      if (cv.isRegistered) {
+        this.setState({
+          voterName: cv.name || "",
+          voterPhone: cv.phone || "",
+        });
+      }
     } catch (error) {
-      // Catch any errors for any of the above operations.
       console.error(error);
       alert(
-        `Failed to load web3, accounts, or contract. Check console for details (f12).`
+        "Failed to load web3, accounts, or contract. Check console for details (F12)."
       );
     }
   };
+
   updateVoterName = (event) => {
     this.setState({ voterName: event.target.value });
   };
+
   updateVoterPhone = (event) => {
     this.setState({ voterPhone: event.target.value });
   };
-  registerAsVoter = async () => {
-    await this.state.ElectionInstance.methods
-      .registerAsVoter(this.state.voterName, this.state.voterPhone)
-      .send({ from: this.state.account, gas: 1000000 });
-    window.location.reload();
+
+  registerAsVoter = async (e) => {
+    e.preventDefault();
+    try {
+      await this.state.ElectionInstance.methods
+        .registerAsVoter(this.state.voterName, this.state.voterPhone)
+        .send({ from: this.state.account, gas: 1000000 });
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert("Registration failed");
+    }
   };
+
   render() {
     if (!this.state.web3) {
       return (
@@ -147,9 +158,11 @@ export default class Registration extends Component {
         </>
       );
     }
+
     return (
       <>
         {this.state.isAdmin ? <NavbarAdmin /> : <Navbar />}
+
         {!this.state.isElStarted && !this.state.isElEnded ? (
           <NotInit />
         ) : (
@@ -157,11 +170,13 @@ export default class Registration extends Component {
             <div className="container-item info">
               <p>Total registered voters: {this.state.voters.length}</p>
             </div>
+
             <div className="container-main">
               <h3>Registration</h3>
               <small>Register to vote.</small>
+
               <div className="container-item">
-                <form>
+                <form onSubmit={this.registerAsVoter}>
                   <div className="div-li">
                     <label className={"label-r"}>
                       Account Address
@@ -169,10 +184,12 @@ export default class Registration extends Component {
                         className={"input-r"}
                         type="text"
                         value={this.state.account}
+                        readOnly
                         style={{ width: "400px" }}
-                      />{" "}
+                      />
                     </label>
                   </div>
+
                   <div className="div-li">
                     <label className={"label-r"}>
                       Name
@@ -182,9 +199,10 @@ export default class Registration extends Component {
                         placeholder="eg. Tom"
                         value={this.state.voterName}
                         onChange={this.updateVoterName}
-                      />{" "}
+                      />
                     </label>
                   </div>
+
                   <div className="div-li">
                     <label className={"label-r"}>
                       Phone number <span style={{ color: "tomato" }}>*</span>
@@ -197,28 +215,28 @@ export default class Registration extends Component {
                       />
                     </label>
                   </div>
+
                   <p className="note">
                     <span style={{ color: "#000000" }}> Note: </span>
                     <br /> Make sure your account address and Phone number are
                     correct. <br /> Admin might not approve your account if the
-                    provided Phone number nub does not matches the account
-                    address registered in admins catalogue.
+                    provided Phone number does not match the admin list.
                   </p>
+
                   <button
                     className="btn-add"
+                    type="submit"
                     disabled={
-                      this.state.voterPhone.length !== 10 ||
+                      String(this.state.voterPhone).length !== 10 ||
                       this.state.currentVoter.isVerified
                     }
-                    onClick={this.registerAsVoter}
                   >
-                    {this.state.currentVoter.isRegistered
-                      ? "Update"
-                      : "Register"}
+                    {this.state.currentVoter.isRegistered ? "Update" : "Register"}
                   </button>
                 </form>
               </div>
             </div>
+
             <div
               className="container-main"
               style={{
@@ -232,11 +250,9 @@ export default class Registration extends Component {
                 this.state.currentVoter.isRegistered
               )}
             </div>
+
             {this.state.isAdmin ? (
-              <div
-                className="container-main"
-                style={{ borderTop: "1px solid" }}
-              >
+              <div className="container-main" style={{ borderTop: "1px solid" }}>
                 <small>TotalVoters: {this.state.voters.length}</small>
                 {loadAllVoters(this.state.voters)}
               </div>
@@ -247,53 +263,54 @@ export default class Registration extends Component {
     );
   }
 }
+
 export function loadCurrentVoter(voter, isRegistered) {
   return (
     <>
-      <div
-        className={"container-item " + (isRegistered ? "success" : "attention")}
-      >
+      <div className={"container-item " + (isRegistered ? "success" : "attention")}>
         <center>Your Registered Info</center>
       </div>
-      <div
-        className={"container-list " + (isRegistered ? "success" : "attention")}
-      >
+
+      <div className={"container-list " + (isRegistered ? "success" : "attention")}>
         <table>
-          <tr>
-            <th>Account Address</th>
-            <td>{voter.address}</td>
-          </tr>
-          <tr>
-            <th>Name</th>
-            <td>{voter.name}</td>
-          </tr>
-          <tr>
-            <th>Phone</th>
-            <td>{voter.phone}</td>
-          </tr>
-          <tr>
-            <th>Voted</th>
-            <td>{voter.hasVoted ? "True" : "False"}</td>
-          </tr>
-          <tr>
-            <th>Verification</th>
-            <td>{voter.isVerified ? "True" : "False"}</td>
-          </tr>
-          <tr>
-            <th>Registered</th>
-            <td>{voter.isRegistered ? "True" : "False"}</td>
-          </tr>
+          <tbody>
+            <tr>
+              <th>Account Address</th>
+              <td>{voter.address}</td>
+            </tr>
+            <tr>
+              <th>Name</th>
+              <td>{voter.name}</td>
+            </tr>
+            <tr>
+              <th>Phone</th>
+              <td>{voter.phone}</td>
+            </tr>
+            <tr>
+              <th>Voted</th>
+              <td>{voter.hasVoted ? "True" : "False"}</td>
+            </tr>
+            <tr>
+              <th>Verification</th>
+              <td>{voter.isVerified ? "True" : "False"}</td>
+            </tr>
+            <tr>
+              <th>Registered</th>
+              <td>{voter.isRegistered ? "True" : "False"}</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </>
   );
 }
+
 export function loadAllVoters(voters) {
   const renderAllVoters = (voter) => {
     return (
-      <>
-        <div className="container-list success">
-          <table>
+      <div className="container-list success" key={voter.address}>
+        <table>
+          <tbody>
             <tr>
               <th>Account address</th>
               <td>{voter.address}</td>
@@ -318,11 +335,12 @@ export function loadAllVoters(voters) {
               <th>Registered</th>
               <td>{voter.isRegistered ? "True" : "False"}</td>
             </tr>
-          </table>
-        </div>
-      </>
+          </tbody>
+        </table>
+      </div>
     );
   };
+
   return (
     <>
       <div className="container-item success">
