@@ -8,7 +8,7 @@ import Election from "../../../contracts/Election.json";
 
 import AdminOnly from "../../AdminOnly";
 
-import * as XLSX from "xlsx"; // ✅ Excel reader
+import * as XLSX from "xlsx";
 
 import "./AddCandidate.css";
 
@@ -24,7 +24,7 @@ export default class AddCandidate extends Component {
       // manual form fields
       name: "",
       party: "",
-      symbol: "",
+      symbol: "", // should be "tree.png"
       age: "",
       gender: "",
       region: "",
@@ -39,7 +39,6 @@ export default class AddCandidate extends Component {
   }
 
   componentDidMount = async () => {
-    // refreshing page only once (keep your behavior)
     if (!window.location.hash) {
       window.location = window.location + "#loaded";
       window.location.reload();
@@ -68,11 +67,10 @@ export default class AddCandidate extends Component {
         account: accounts[0],
       });
 
-      // ✅ candidateCount is now a public variable in upgraded contract
+      // ✅ NEW ABI
       const candidateCount = await instance.methods.candidateCount().call();
       this.setState({ candidateCount: Number(candidateCount) });
 
-      // ✅ admin is now public variable => admin()
       const admin = await instance.methods.admin().call();
       if (accounts[0].toLowerCase() === admin.toLowerCase()) {
         this.setState({ isAdmin: true });
@@ -110,6 +108,7 @@ export default class AddCandidate extends Component {
 
   addCandidate = async (e) => {
     e.preventDefault();
+
     try {
       const { ElectionInstance, account } = this.state;
 
@@ -123,7 +122,7 @@ export default class AddCandidate extends Component {
         .addCandidate(
           this.state.name.trim(),
           this.state.party.trim(),
-          this.state.symbol.trim(),
+          this.state.symbol.trim(), // store file name like "tree.png"
           ageNum,
           this.state.gender.trim(),
           this.state.region.trim()
@@ -138,7 +137,6 @@ export default class AddCandidate extends Component {
   };
 
   // ---------------- Excel Upload ----------------
-  // Expected columns: name, party, symbol, age, gender, region
   onExcelSelected = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -153,17 +151,18 @@ export default class AddCandidate extends Component {
         return;
       }
 
-      // normalize + validate rows
       const cleaned = rows
         .map((r) => ({
           name: (r.name ?? r.Name ?? "").toString().trim(),
           party: (r.party ?? r.Party ?? "").toString().trim(),
-          symbol: (r.symbol ?? r.Symbol ?? "").toString().trim(),
+          symbol: (r.symbol ?? r.Symbol ?? "").toString().trim(), // "tree.png"
           age: Number(r.age ?? r.Age ?? 0),
           gender: (r.gender ?? r.Gender ?? "").toString().trim(),
           region: (r.region ?? r.Region ?? "").toString().trim(),
         }))
-        .filter((r) => r.name && r.party && r.symbol && r.age > 0 && r.gender && r.region);
+        .filter(
+          (r) => r.name && r.party && r.symbol && r.age > 0 && r.gender && r.region
+        );
 
       if (!cleaned.length) {
         this.setState({
@@ -204,8 +203,7 @@ export default class AddCandidate extends Component {
 
   uploadCandidatesInChunks = async (rows) => {
     const { ElectionInstance, account } = this.state;
-
-    const CHUNK = 25; // ✅ safe size for Ganache (adjust if needed)
+    const CHUNK = 25;
 
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
@@ -227,6 +225,27 @@ export default class AddCandidate extends Component {
         .addCandidatesBatch(names, parties, symbols, ages, genders, regions)
         .send({ from: account, gas: 5000000 });
     }
+  };
+
+  // ✅ helper for rendering symbol from public folder
+  renderSymbolImg = (symbol, size = 50) => {
+    if (!symbol) return null;
+
+    return (
+      <img
+        src={`/symbols/${symbol}`}
+        alt="symbol"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          objectFit: "contain",
+          verticalAlign: "middle",
+        }}
+        onError={(e) => {
+          e.currentTarget.style.display = "none";
+        }}
+      />
+    );
   };
 
   render() {
@@ -261,7 +280,11 @@ export default class AddCandidate extends Component {
             <div style={{ width: "100%" }}>
               <h3 style={{ marginBottom: "10px" }}>Upload by Excel (.xlsx)</h3>
               <p style={{ marginTop: 0 }}>
-                Required columns: <code>name, party, symbol, age, gender, region</code>
+                Required columns:{" "}
+                <code>name, party, symbol, age, gender, region</code>
+                <br />
+                <br />
+                Symbol must be a filename like <code>tree.png</code>
               </p>
 
               <input
@@ -285,7 +308,7 @@ export default class AddCandidate extends Component {
                 <input
                   className={"input-ac"}
                   type="text"
-                  placeholder="e.g. Tom"
+                  placeholder="e.g. Ram Sharma"
                   value={this.state.name}
                   onChange={this.handleChange("name")}
                 />
@@ -296,22 +319,30 @@ export default class AddCandidate extends Component {
                 <input
                   className={"input-ac"}
                   type="text"
-                  placeholder="e.g. ABC Party"
+                  placeholder="e.g. Youth Party"
                   value={this.state.party}
                   onChange={this.handleChange("party")}
                 />
               </label>
 
               <label className={"label-ac"}>
-                Symbol (URL or text)
+                Symbol filename (from public/symbols)
                 <input
                   className={"input-ac"}
                   type="text"
-                  placeholder="e.g. https://.../symbol.png"
+                  placeholder="e.g. tree.png"
                   value={this.state.symbol}
                   onChange={this.handleChange("symbol")}
                 />
               </label>
+
+              {/* ✅ Symbol Preview */}
+              {this.state.symbol?.trim() ? (
+                <div style={{ margin: "10px 0px" }}>
+                  <strong>Symbol Preview: </strong>
+                  {this.renderSymbolImg(this.state.symbol.trim(), 60)}
+                </div>
+              ) : null}
 
               <label className={"label-ac"}>
                 Age
@@ -370,19 +401,29 @@ export default class AddCandidate extends Component {
   }
 }
 
-// ✅ Updated list renderer (shows new fields)
+// ✅ Updated list renderer (shows image symbol, not text)
 export function loadAdded(candidates) {
   const renderAdded = (candidate) => {
     return (
       <div className="container-list success" key={candidate.id}>
-        <div style={{ maxHeight: "60px", overflow: "auto" }}>
-          <strong>
-            {candidate.id}. {candidate.name}
-          </strong>{" "}
-          | {candidate.party} | {candidate.gender}, {candidate.age} |{" "}
-          {candidate.region}
-          <br />
-          <small>Symbol: {candidate.symbol}</small>
+        <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+          <img
+            src={`/symbols/${candidate.symbol}`}
+            alt="symbol"
+            style={{ width: "55px", height: "55px", objectFit: "contain" }}
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+
+          <div style={{ maxHeight: "80px", overflow: "auto" }}>
+            <strong>
+              {candidate.id}. {candidate.name}
+            </strong>
+            <br />
+            {candidate.party} | {candidate.gender}, {candidate.age} |{" "}
+            {candidate.region}
+          </div>
         </div>
       </div>
     );

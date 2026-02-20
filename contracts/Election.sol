@@ -39,7 +39,7 @@ contract Election {
         _;
     }
 
-    // Optional: if you want to change later without redeploy
+    // Optional: change later without redeploy
     function setElectionInfo(string memory _name, string memory _description) public onlyAdmin {
         electionName = _name;
         electionDescription = _description;
@@ -51,7 +51,7 @@ contract Election {
         uint256 candidateId;
         string name;
         string party;
-        string symbol; // URL or IPFS hash
+        string symbol; // store filename like "tree.png" or URL/IPFS
         uint256 age;
         string gender;
         string region;
@@ -75,7 +75,7 @@ contract Election {
         emit CandidateAdded(id, _name, _party, _region);
     }
 
-    // Batch add (use chunks in frontend, e.g., 20–50 rows per tx)
+    // Batch add candidates (frontend should chunk, e.g., 20–50 rows per tx)
     function addCandidatesBatch(
         string[] memory _name,
         string[] memory _party,
@@ -95,18 +95,32 @@ contract Election {
 
         for (uint256 i = 0; i < _name.length; i++) {
             uint256 id = candidateCount;
-            candidateDetails[id] = Candidate(id, _name[i], _party[i], _symbol[i], _age[i], _gender[i], _region[i], 0);
+            candidateDetails[id] = Candidate(
+                id,
+                _name[i],
+                _party[i],
+                _symbol[i],
+                _age[i],
+                _gender[i],
+                _region[i],
+                0
+            );
             candidateCount += 1;
 
             emit CandidateAdded(id, _name[i], _party[i], _region[i]);
         }
     }
 
-    // ---------------- VOTERS (Excel-ready) ----------------
+    // ---------------- VOTERS (Excel-ready + demographics) ----------------
     struct Voter {
         address voterAddress;
-        string name;    // optional (Excel)
-        string phone;   // optional (Excel)
+        string name;
+        string phone;
+        string email;
+        uint256 age;
+        string gender;
+        string region;
+
         bool isVerified;
         bool hasVoted;
         bool isRegistered;
@@ -115,32 +129,91 @@ contract Election {
     mapping(address => Voter) public voterDetails;
     address[] public voters;
 
-    // Keep your old self-register if you want
-    function registerAsVoter(string memory _name, string memory _phone) public {
-        require(!voterDetails[msg.sender].isRegistered, "Already registered");
+    // Self-register (now includes demographics)
+    function registerAsVoter(
+        string memory _name,
+        string memory _phone,
+        string memory _email,
+        uint256 _age,
+        string memory _gender,
+        string memory _region
+    ) public {
+        require(_age > 0, "Invalid age");
 
-        voterDetails[msg.sender] = Voter(msg.sender, _name, _phone, false, false, true);
-        voters.push(msg.sender);
-        voterCount += 1;
+        bool already = voterDetails[msg.sender].isRegistered;
 
-        emit VoterRegistered(msg.sender);
+        // If already verified, you can optionally prevent edits
+        // require(!voterDetails[msg.sender].isVerified, "Already verified");
+
+        voterDetails[msg.sender] = Voter(
+            msg.sender,
+            _name,
+            _phone,
+            _email,
+            _age,
+            _gender,
+            _region,
+            false,
+            false,
+            true
+        );
+
+        // Only count/push first time
+        if (!already) {
+            voters.push(msg.sender);
+            voterCount += 1;
+            emit VoterRegistered(msg.sender);
+        }
     }
 
-    // Supervisor: Excel import voters (addresses + optional name/phone)
+    // Supervisor: Excel import voters (address + demographics)
     function registerVotersBatch(
         address[] memory _addr,
         string[] memory _name,
-        string[] memory _phone
+        string[] memory _phone,
+        string[] memory _email,
+        uint256[] memory _age,
+        string[] memory _gender,
+        string[] memory _region
     ) public onlyAdmin {
-        require(_addr.length == _name.length && _name.length == _phone.length, "Length mismatch");
+        require(
+            _addr.length == _name.length &&
+            _name.length == _phone.length &&
+            _phone.length == _email.length &&
+            _email.length == _age.length &&
+            _age.length == _gender.length &&
+            _gender.length == _region.length,
+            "Length mismatch"
+        );
 
         for (uint256 i = 0; i < _addr.length; i++) {
             address v = _addr[i];
+            require(_age[i] > 0, "Invalid age");
+
             if (!voterDetails[v].isRegistered) {
-                voterDetails[v] = Voter(v, _name[i], _phone[i], false, false, true);
+                voterDetails[v] = Voter(
+                    v,
+                    _name[i],
+                    _phone[i],
+                    _email[i],
+                    _age[i],
+                    _gender[i],
+                    _region[i],
+                    false,
+                    false,
+                    true
+                );
                 voters.push(v);
                 voterCount += 1;
                 emit VoterRegistered(v);
+            } else {
+                // If already registered, update info (optional)
+                voterDetails[v].name = _name[i];
+                voterDetails[v].phone = _phone[i];
+                voterDetails[v].email = _email[i];
+                voterDetails[v].age = _age[i];
+                voterDetails[v].gender = _gender[i];
+                voterDetails[v].region = _region[i];
             }
         }
     }

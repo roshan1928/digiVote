@@ -41,7 +41,6 @@ export default class Voting extends Component {
   }
 
   componentDidMount = async () => {
-    // refreshing once
     if (!window.location.hash) {
       window.location = window.location + "#loaded";
       window.location.reload();
@@ -91,7 +90,7 @@ export default class Voting extends Component {
           id: Number(c.candidateId),
           name: c.name,
           party: c.party,
-          symbol: c.symbol, // e.g. "tree.png"
+          symbol: c.symbol, // "tree.png"
           age: Number(c.age),
           gender: c.gender,
           region: c.region,
@@ -99,7 +98,7 @@ export default class Voting extends Component {
       }
       this.setState({ candidates });
 
-      // ✅ Load current voter (same struct)
+      // ✅ Load current voter
       const voter = await instance.methods.voterDetails(accounts[0]).call();
       this.setState({
         currentVoter: {
@@ -142,44 +141,41 @@ export default class Voting extends Component {
       !this.state.currentVoter.isVerified ||
       this.state.currentVoter.hasVoted;
 
-    // Optional: show symbol image if you store PNG names like "tree.png"
-    // Put your images in: client/src/assets/symbols/
-    let symbolImg = null;
-    try {
-      symbolImg = candidate.symbol
-        ? require(`../../assets/symbols/${candidate.symbol}`)
-        : null;
-    } catch (e) {
-      symbolImg = null; // if image not found, just ignore
-    }
-
     return (
       <div className="container-item" key={candidate.id}>
         <div className="candidate-info">
           <h2>
             {candidate.name} <small>#{candidate.id}</small>
           </h2>
+
           <p className="slogan">
             <strong>Party:</strong> {candidate.party} <br />
             <strong>Region:</strong> {candidate.region} <br />
             <strong>Gender/Age:</strong> {candidate.gender}, {candidate.age}
           </p>
 
-          {symbolImg ? (
-            <div style={{ marginTop: "8px" }}>
-              <strong>Symbol: </strong>
+          {/* ✅ Symbol Image ONLY (no filename text) */}
+          <div style={{ marginTop: "10px" }}>
+            <strong>Symbol:</strong>{" "}
+            {candidate.symbol ? (
               <img
-                src={symbolImg}
+                src={`/symbols/${candidate.symbol}`}
                 alt="symbol"
-                style={{ width: "55px", height: "55px", objectFit: "contain" }}
+                style={{
+                  width: "60px",
+                  height: "60px",
+                  objectFit: "contain",
+                  marginLeft: "10px",
+                  verticalAlign: "middle",
+                }}
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
               />
-              <small style={{ marginLeft: "10px" }}>{candidate.symbol}</small>
-            </div>
-          ) : (
-            <p style={{ marginTop: "8px" }}>
-              <strong>Symbol:</strong> {candidate.symbol || "N/A"}
-            </p>
-          )}
+            ) : (
+              <span>N/A</span>
+            )}
+          </div>
         </div>
 
         <div className="vote-btn-container">
@@ -225,7 +221,10 @@ export default class Voting extends Component {
                         <center>
                           <Link
                             to="/Results"
-                            style={{ color: "black", textDecoration: "underline" }}
+                            style={{
+                              color: "black",
+                              textDecoration: "underline",
+                            }}
                           >
                             See Results
                           </Link>
@@ -249,7 +248,10 @@ export default class Voting extends Component {
                     <br />
                     <Link
                       to="/Registration"
-                      style={{ color: "black", textDecoration: "underline" }}
+                      style={{
+                        color: "black",
+                        textDecoration: "underline",
+                      }}
                     >
                       Registration Page
                     </Link>
@@ -269,7 +271,10 @@ export default class Voting extends Component {
                 ) : (
                   <>
                     {this.state.candidates.map(this.renderCandidates)}
-                    <div className="container-item" style={{ border: "1px solid black" }}>
+                    <div
+                      className="container-item"
+                      style={{ border: "1px solid black" }}
+                    >
                       <center>That is all.</center>
                     </div>
                   </>
@@ -283,7 +288,10 @@ export default class Voting extends Component {
                 <br />
                 <Link
                   to="/Results"
-                  style={{ color: "black", textDecoration: "underline" }}
+                  style={{
+                    color: "black",
+                    textDecoration: "underline",
+                  }}
                 >
                   See results
                 </Link>

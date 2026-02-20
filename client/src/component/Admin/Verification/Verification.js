@@ -54,13 +54,12 @@ export default class Verification extends Component {
 
       this.setState({ web3, ElectionInstance: instance, account: accounts[0] });
 
-      // ✅ Admin check (NEW ABI)
+      // ✅ Admin check
       const admin = await instance.methods.admin().call();
-      if (accounts[0].toLowerCase() === admin.toLowerCase()) {
-        this.setState({ isAdmin: true });
-      }
+      const isAdmin = accounts[0].toLowerCase() === admin.toLowerCase();
+      this.setState({ isAdmin });
 
-      // ✅ Total voters (NEW ABI: voterCount is public)
+      // ✅ Total voters
       const voterCount = await instance.methods.voterCount().call();
       this.setState({ voterCount: Number(voterCount) });
 
@@ -75,21 +74,25 @@ export default class Verification extends Component {
     const voters = [];
     for (let i = 0; i < count; i++) {
       const voterAddress = await instance.methods.voters(i).call();
-      const voter = await instance.methods.voterDetails(voterAddress).call();
+      const v = await instance.methods.voterDetails(voterAddress).call();
 
       voters.push({
-        address: voter.voterAddress,
-        name: voter.name,
-        phone: voter.phone,
-        hasVoted: voter.hasVoted,
-        isVerified: voter.isVerified,
-        isRegistered: voter.isRegistered,
+        address: v.voterAddress,
+        name: v.name,
+        phone: v.phone,
+        email: v.email,
+        age: Number(v.age),
+        gender: v.gender,
+        region: v.region,
+        hasVoted: v.hasVoted,
+        isVerified: v.isVerified,
+        isRegistered: v.isRegistered,
       });
     }
     this.setState({ voters });
   };
 
-  // ✅ Approve voter
+  // ✅ Approve/Reject voter
   verifyVoter = async (verifiedStatus, address) => {
     try {
       await this.state.ElectionInstance.methods
@@ -102,14 +105,16 @@ export default class Verification extends Component {
     }
   };
 
-  // ---------------- Excel Upload for Voters ----------------
-  // Expected columns: address, name, phone
+  /* ---------------- Excel Upload for Voters ----------------
+     Required columns:
+     address, name, phone, email, age, gender, region
+  */
   onExcelSelected = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      this.setState({ uploading: true, uploadMsg: "Reading file..." });
+      this.setState({ uploading: true, uploadMsg: "Reading Excel..." });
 
       const rows = await this.readExcel(file);
 
@@ -118,24 +123,44 @@ export default class Verification extends Component {
           address: (r.address ?? r.Address ?? "").toString().trim(),
           name: (r.name ?? r.Name ?? "").toString().trim(),
           phone: (r.phone ?? r.Phone ?? "").toString().trim(),
+          email: (r.email ?? r.Email ?? "").toString().trim(),
+          age: Number(r.age ?? r.Age ?? 0),
+          gender: (r.gender ?? r.Gender ?? "").toString().trim(),
+          region: (r.region ?? r.Region ?? "").toString().trim(),
         }))
-        .filter((r) => r.address); // address required
+        .filter(
+          (r) =>
+            r.address &&
+            r.name &&
+            r.phone &&
+            r.email &&
+            r.age > 0 &&
+            r.gender &&
+            r.region
+        );
 
       if (!cleaned.length) {
         this.setState({
           uploading: false,
-          uploadMsg: "No valid rows. Required column: address (name, phone optional).",
+          uploadMsg:
+            "No valid rows. Required: address, name, phone, email, age, gender, region",
         });
         return;
       }
 
       await this.registerVotersInChunks(cleaned);
 
-      this.setState({ uploading: false, uploadMsg: "✅ Voters uploaded successfully!" });
+      this.setState({
+        uploading: false,
+        uploadMsg: "✅ Voters uploaded successfully!",
+      });
       window.location.reload();
     } catch (err) {
       console.error(err);
-      this.setState({ uploading: false, uploadMsg: "❌ Upload failed. Check console." });
+      this.setState({
+        uploading: false,
+        uploadMsg: "❌ Upload failed. Check console.",
+      });
     }
   };
 
@@ -159,21 +184,27 @@ export default class Verification extends Component {
 
   registerVotersInChunks = async (rows) => {
     const { ElectionInstance, account } = this.state;
-    const CHUNK = 30;
+    const CHUNK = 20; // safe for ganache
 
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
 
-      const addr = chunk.map((r) => r.address);
-      const name = chunk.map((r) => r.name || "");
-      const phone = chunk.map((r) => r.phone || "");
+      const addrs = chunk.map((r) => r.address);
+      const names = chunk.map((r) => r.name);
+      const phones = chunk.map((r) => r.phone);
+      const emails = chunk.map((r) => r.email);
+      const ages = chunk.map((r) => r.age);
+      const genders = chunk.map((r) => r.gender);
+      const regions = chunk.map((r) => r.region);
 
       this.setState({
-        uploadMsg: `Uploading ${i + 1}-${Math.min(i + CHUNK, rows.length)} of ${rows.length}...`,
+        uploadMsg: `Uploading ${i + 1}-${Math.min(i + CHUNK, rows.length)} of ${
+          rows.length
+        }...`,
       });
 
       await ElectionInstance.methods
-        .registerVotersBatch(addr, name, phone)
+        .registerVotersBatch(addrs, names, phones, emails, ages, genders, regions)
         .send({ from: account, gas: 5000000 });
     }
   };
@@ -187,11 +218,19 @@ export default class Verification extends Component {
             <tr>
               <th>Name</th>
               <th>Phone</th>
+              <th>Email</th>
+              <th>Age</th>
+              <th>Gender</th>
+              <th>Region</th>
               <th>Voted</th>
             </tr>
             <tr>
               <td>{voter.name}</td>
               <td>{voter.phone}</td>
+              <td>{voter.email}</td>
+              <td>{voter.age}</td>
+              <td>{voter.gender}</td>
+              <td>{voter.region}</td>
               <td>{voter.hasVoted ? "True" : "False"}</td>
             </tr>
           </tbody>
@@ -220,6 +259,22 @@ export default class Verification extends Component {
               <td>{voter.phone}</td>
             </tr>
             <tr>
+              <th>Email</th>
+              <td>{voter.email}</td>
+            </tr>
+            <tr>
+              <th>Age</th>
+              <td>{voter.age}</td>
+            </tr>
+            <tr>
+              <th>Gender</th>
+              <td>{voter.gender}</td>
+            </tr>
+            <tr>
+              <th>Region</th>
+              <td>{voter.region}</td>
+            </tr>
+            <tr>
               <th>Voted</th>
               <td>{voter.hasVoted ? "True" : "False"}</td>
             </tr>
@@ -241,6 +296,14 @@ export default class Verification extends Component {
             onClick={() => this.verifyVoter(true, voter.address)}
           >
             Approve
+          </button>
+          {/* optional reject button */}
+          <button
+            className="btn-verification reject"
+            style={{ marginLeft: "10px" }}
+            onClick={() => this.verifyVoter(false, voter.address)}
+          >
+            Reject
           </button>
         </div>
       </div>
@@ -286,7 +349,8 @@ export default class Verification extends Component {
             <div style={{ width: "100%" }}>
               <h4>Upload Voters by Excel (.xlsx)</h4>
               <p style={{ marginTop: 0 }}>
-                Required column: <code>address</code> (optional: <code>name</code>, <code>phone</code>)
+                Required columns:{" "}
+                <code>address, name, phone, email, age, gender, region</code>
               </p>
               <input
                 type="file"
@@ -294,7 +358,9 @@ export default class Verification extends Component {
                 onChange={this.onExcelSelected}
                 disabled={this.state.uploading}
               />
-              {this.state.uploadMsg && <p style={{ marginTop: "10px" }}>{this.state.uploadMsg}</p>}
+              {this.state.uploadMsg && (
+                <p style={{ marginTop: "10px" }}>{this.state.uploadMsg}</p>
+              )}
             </div>
           </div>
 
