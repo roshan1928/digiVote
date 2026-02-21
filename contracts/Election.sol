@@ -21,6 +21,10 @@ contract Election {
     event VoterVerified(address indexed voter, bool status);
     event VoteCast(address indexed voter, uint256 indexed candidateId);
 
+    // ✅ NEW EVENTS for Email Notifier (Node server will listen to these)
+    event ElectionStarted(uint256 timestamp);
+    event ElectionEnded(uint256 timestamp);
+
     constructor(string memory _name, string memory _description) {
         admin = msg.sender;
         electionName = _name;
@@ -142,9 +146,6 @@ contract Election {
 
         bool already = voterDetails[msg.sender].isRegistered;
 
-        // If already verified, you can optionally prevent edits
-        // require(!voterDetails[msg.sender].isVerified, "Already verified");
-
         voterDetails[msg.sender] = Voter(
             msg.sender,
             _name,
@@ -229,11 +230,18 @@ contract Election {
         require(!start && !end, "Already started/ended");
         start = true;
         end = false;
+
+        // ✅ Event for notifier
+        emit ElectionStarted(block.timestamp);
     }
 
     function endElection() public onlyAdmin {
+        require(start && !end, "Election not active");
         end = true;
         start = false;
+
+        // ✅ Event for notifier
+        emit ElectionEnded(block.timestamp);
     }
 
     // ---------------- VOTING ----------------

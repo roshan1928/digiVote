@@ -79,8 +79,7 @@ export default class Registration extends Component {
       });
 
       const admin = await instance.methods.admin().call();
-      const isAdmin =
-        accounts[0].toLowerCase() === admin.toLowerCase();
+      const isAdmin = accounts[0].toLowerCase() === admin.toLowerCase();
       this.setState({ isAdmin });
 
       const start = await instance.methods.start().call();
@@ -90,9 +89,7 @@ export default class Registration extends Component {
       const voterCount = await instance.methods.voterCount().call();
       this.setState({ voterCount: Number(voterCount) });
 
-      const cv = await instance.methods
-        .voterDetails(accounts[0])
-        .call();
+      const cv = await instance.methods.voterDetails(accounts[0]).call();
 
       this.setState({
         currentVoter: {
@@ -113,12 +110,8 @@ export default class Registration extends Component {
       if (isAdmin) {
         const voters = [];
         for (let i = 0; i < Number(voterCount); i++) {
-          const voterAddress =
-            await instance.methods.voters(i).call();
-          const v =
-            await instance.methods
-              .voterDetails(voterAddress)
-              .call();
+          const voterAddress = await instance.methods.voters(i).call();
+          const v = await instance.methods.voterDetails(voterAddress).call();
 
           voters.push({
             address: v.voterAddress,
@@ -140,8 +133,7 @@ export default class Registration extends Component {
     }
   };
 
-  handleChange = (key) => (e) =>
-    this.setState({ [key]: e.target.value });
+  handleChange = (key) => (e) => this.setState({ [key]: e.target.value });
 
   registerAsVoter = async (e) => {
     e.preventDefault();
@@ -158,7 +150,8 @@ export default class Registration extends Component {
         .send({ from: this.state.account, gas: 1500000 });
 
       window.location.reload();
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("Registration failed");
     }
   };
@@ -174,42 +167,39 @@ export default class Registration extends Component {
 
       const reader = new FileReader();
       reader.onload = async (evt) => {
-        const workbook = XLSX.read(evt.target.result, {
-          type: "binary",
-        });
-        const ws =
-          workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws);
+        try {
+          const workbook = XLSX.read(evt.target.result, { type: "binary" });
+          const ws = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws);
 
-        const addrs = rows.map((r) => r.address);
-        const names = rows.map((r) => r.name);
-        const phones = rows.map((r) => r.phone);
-        const emails = rows.map((r) => r.email);
-        const ages = rows.map((r) => r.age);
-        const genders = rows.map((r) => r.gender);
-        const regions = rows.map((r) => r.region);
+          const addrs = rows.map((r) => r.address);
+          const names = rows.map((r) => r.name);
+          const phones = rows.map((r) => r.phone);
+          const emails = rows.map((r) => r.email);
+          const ages = rows.map((r) => r.age);
+          const genders = rows.map((r) => r.gender);
+          const regions = rows.map((r) => r.region);
 
-        await this.state.ElectionInstance.methods
-          .registerVotersBatch(
-            addrs,
-            names,
-            phones,
-            emails,
-            ages,
-            genders,
-            regions
-          )
-          .send({
-            from: this.state.account,
-            gas: 5000000,
+          await this.state.ElectionInstance.methods
+            .registerVotersBatch(addrs, names, phones, emails, ages, genders, regions)
+            .send({
+              from: this.state.account,
+              gas: 5000000,
+            });
+
+          this.setState({
+            uploading: false,
+            uploadMsg: "Upload complete!",
           });
 
-        this.setState({
-          uploading: false,
-          uploadMsg: "Upload complete!",
-        });
-
-        window.location.reload();
+          window.location.reload();
+        } catch (err2) {
+          console.error(err2);
+          this.setState({
+            uploading: false,
+            uploadMsg: "Upload failed.",
+          });
+        }
       };
 
       reader.readAsBinaryString(file);
@@ -226,34 +216,26 @@ export default class Registration extends Component {
     if (!this.state.web3) {
       return (
         <>
-          {this.state.isAdmin ? (
-            <NavbarAdmin />
-          ) : (
-            <Navbar />
-          )}
+          {this.state.isAdmin ? <NavbarAdmin /> : <Navbar />}
           <center>Loading...</center>
         </>
       );
     }
 
+    // ✅ Allow voter registration before election
+    // ✅ No NotInit blocking on Registration page
+    const showNotInit = false;
+
     return (
       <>
-        {this.state.isAdmin ? (
-          <NavbarAdmin />
-        ) : (
-          <Navbar />
-        )}
+        {this.state.isAdmin ? <NavbarAdmin /> : <Navbar />}
 
-        {!this.state.isElStarted &&
-        !this.state.isElEnded ? (
+        {showNotInit ? (
           <NotInit />
         ) : (
           <>
             <div className="container-item info">
-              <p>
-                Total registered voters:{" "}
-                {this.state.voterCount}
-              </p>
+              <p>Total registered voters: {this.state.voterCount}</p>
             </div>
 
             {/* ================= ADMIN SECTION ================= */}
@@ -267,20 +249,12 @@ export default class Registration extends Component {
                       accept=".xlsx,.xls"
                       onChange={this.onExcelSelected}
                     />
-                    {this.state.uploadMsg && (
-                      <p>{this.state.uploadMsg}</p>
-                    )}
+                    {this.state.uploadMsg && <p>{this.state.uploadMsg}</p>}
                   </div>
                 </div>
 
-                <div
-                  className="container-main"
-                  style={{ borderTop: "1px solid" }}
-                >
-                  <small>
-                    Total Voters:{" "}
-                    {this.state.voters.length}
-                  </small>
+                <div className="container-main" style={{ borderTop: "1px solid" }}>
+                  <small>Total Voters: {this.state.voters.length}</small>
                   {loadAllVoters(this.state.voters)}
                 </div>
               </>
@@ -291,74 +265,57 @@ export default class Registration extends Component {
               <div className="container-main">
                 <h3>Registration</h3>
                 <div className="container-item">
-                  <form
-                    onSubmit={this.registerAsVoter}
-                  >
+                  <form onSubmit={this.registerAsVoter}>
                     <input
                       type="text"
                       placeholder="Name"
                       value={this.state.voterName}
-                      onChange={this.handleChange(
-                        "voterName"
-                      )}
+                      onChange={this.handleChange("voterName")}
+                      required
                     />
                     <input
                       type="text"
                       placeholder="Phone"
                       value={this.state.voterPhone}
-                      onChange={this.handleChange(
-                        "voterPhone"
-                      )}
+                      onChange={this.handleChange("voterPhone")}
+                      required
                     />
                     <input
                       type="email"
                       placeholder="Email"
                       value={this.state.voterEmail}
-                      onChange={this.handleChange(
-                        "voterEmail"
-                      )}
+                      onChange={this.handleChange("voterEmail")}
+                      required
                     />
                     <input
                       type="number"
                       placeholder="Age"
                       value={this.state.voterAge}
-                      onChange={this.handleChange(
-                        "voterAge"
-                      )}
+                      onChange={this.handleChange("voterAge")}
+                      required
                     />
                     <input
                       type="text"
                       placeholder="Gender"
                       value={this.state.voterGender}
-                      onChange={this.handleChange(
-                        "voterGender"
-                      )}
+                      onChange={this.handleChange("voterGender")}
+                      required
                     />
                     <input
                       type="text"
                       placeholder="Region"
                       value={this.state.voterRegion}
-                      onChange={this.handleChange(
-                        "voterRegion"
-                      )}
+                      onChange={this.handleChange("voterRegion")}
+                      required
                     />
-                    <button
-                      className="btn-add"
-                      type="submit"
-                    >
+                    <button className="btn-add" type="submit">
                       Register
                     </button>
                   </form>
                 </div>
 
-                <div
-                  style={{
-                    marginTop: "20px",
-                  }}
-                >
-                  {loadCurrentVoter(
-                    this.state.currentVoter
-                  )}
+                <div style={{ marginTop: "20px" }}>
+                  {loadCurrentVoter(this.state.currentVoter)}
                 </div>
               </div>
             )}
@@ -372,25 +329,46 @@ export default class Registration extends Component {
 /* ================= Helper Views ================= */
 
 export function loadCurrentVoter(voter) {
+  if (!voter || !voter.address) return null;
+
+  // ✅ Same design like screenshot
   return (
-    <div className="container-list success">
-      <table>
-        <tbody>
-          <tr>
-            <th>Name</th>
-            <td>{voter.name}</td>
-          </tr>
-          <tr>
-            <th>Email</th>
-            <td>{voter.email}</td>
-          </tr>
-          <tr>
-            <th>Region</th>
-            <td>{voter.region}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="container-item success">
+        <center>Your Registered Info</center>
+      </div>
+
+      <div className="container-list success">
+        <table>
+          <tbody>
+            <tr>
+              <th>Account Address</th>
+              <td>{voter.address}</td>
+            </tr>
+            <tr>
+              <th>Name</th>
+              <td>{voter.name}</td>
+            </tr>
+            <tr>
+              <th>Phone</th>
+              <td>{voter.phone}</td>
+            </tr>
+            <tr>
+              <th>Voted</th>
+              <td>{voter.hasVoted ? "True" : "False"}</td>
+            </tr>
+            <tr>
+              <th>Verification</th>
+              <td>{voter.isVerified ? "True" : "False"}</td>
+            </tr>
+            <tr>
+              <th>Registered</th>
+              <td>{voter.isRegistered ? "True" : "False"}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -402,10 +380,7 @@ export function loadAllVoters(voters) {
       </div>
 
       {voters.map((voter) => (
-        <div
-          className="container-list success"
-          key={voter.address}
-        >
+        <div className="container-list success" key={voter.address}>
           <table>
             <tbody>
               <tr>
@@ -438,27 +413,15 @@ export function loadAllVoters(voters) {
               </tr>
               <tr>
                 <th>Voted</th>
-                <td>
-                  {voter.hasVoted
-                    ? "True"
-                    : "False"}
-                </td>
+                <td>{voter.hasVoted ? "True" : "False"}</td>
               </tr>
               <tr>
                 <th>Verified</th>
-                <td>
-                  {voter.isVerified
-                    ? "True"
-                    : "False"}
-                </td>
+                <td>{voter.isVerified ? "True" : "False"}</td>
               </tr>
               <tr>
                 <th>Registered</th>
-                <td>
-                  {voter.isRegistered
-                    ? "True"
-                    : "False"}
-                </td>
+                <td>{voter.isRegistered ? "True" : "False"}</td>
               </tr>
             </tbody>
           </table>

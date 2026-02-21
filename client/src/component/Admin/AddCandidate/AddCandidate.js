@@ -326,7 +326,7 @@ export default class AddCandidate extends Component {
               </label>
 
               <label className={"label-ac"}>
-                Symbol filename (from public/symbols)
+                Symbol
                 <input
                   className={"input-ac"}
                   type="text"
