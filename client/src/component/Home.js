@@ -37,6 +37,50 @@ export default class Home extends Component {
     };
   }
 
+  // ✅ Parses description like:
+  // "Organization: X | Admin: Y Z | Title: T | Email: E"
+  // and safely falls back if description is plain text.
+  parseElectionDescription = (desc) => {
+    const result = {
+      organizationTitle: "",
+      adminName: "",
+      adminTitle: "",
+      adminEmail: "",
+    };
+
+    if (!desc || typeof desc !== "string") return result;
+
+    // If it's not in your "Organization: ... | Admin: ..." format, treat whole thing as organizationTitle
+    const looksFormatted =
+      desc.includes("|") &&
+      (desc.toLowerCase().includes("organization:") ||
+        desc.toLowerCase().includes("admin:") ||
+        desc.toLowerCase().includes("title:") ||
+        desc.toLowerCase().includes("email:"));
+
+    if (!looksFormatted) {
+      result.organizationTitle = desc.trim();
+      return result;
+    }
+
+    const parts = desc.split("|").map((p) => p.trim());
+
+    for (const p of parts) {
+      const lower = p.toLowerCase();
+      if (lower.startsWith("organization:")) {
+        result.organizationTitle = p.split(":").slice(1).join(":").trim();
+      } else if (lower.startsWith("admin:")) {
+        result.adminName = p.split(":").slice(1).join(":").trim();
+      } else if (lower.startsWith("title:")) {
+        result.adminTitle = p.split(":").slice(1).join(":").trim();
+      } else if (lower.startsWith("email:")) {
+        result.adminEmail = p.split(":").slice(1).join(":").trim();
+      }
+    }
+
+    return result;
+  };
+
   componentDidMount = async () => {
     try {
       if (!window.ethereum) {
@@ -69,32 +113,34 @@ export default class Home extends Component {
         account: accounts[0],
       });
 
-      // ✅ Check if current account is admin (NEW ABI)
+      // ✅ Check if current account is admin
       const admin = await electionInstance.methods.admin().call();
       if (accounts[0].toLowerCase() === admin.toLowerCase()) {
         this.setState({ isAdmin: true });
       }
 
-      // ✅ Get election start/end (NEW ABI)
+      // ✅ Get election start/end
       const start = await electionInstance.methods.start().call();
       const end = await electionInstance.methods.end().call();
 
-      // ✅ Get election name/description (NEW ABI)
+      // ✅ Get election info
       const electionName = await electionInstance.methods.electionName().call();
       const electionDescription = await electionInstance.methods
         .electionDescription()
         .call();
 
-      // Map to your existing UI fields
+      const parsed = this.parseElectionDescription(electionDescription);
+
       this.setState({
         elStarted: start,
         elEnded: end,
         elDetails: {
-          adminName: "", // no longer stored on-chain
-          adminEmail: "", // no longer stored on-chain
-          adminTitle: "", // no longer stored on-chain
           electionTitle: electionName || "",
-          organizationTitle: electionDescription || "",
+          organizationTitle: parsed.organizationTitle || "",
+
+          adminName: parsed.adminName || "",
+          adminTitle: parsed.adminTitle || "",
+          adminEmail: parsed.adminEmail || "",
         },
       });
 
@@ -107,7 +153,7 @@ export default class Home extends Component {
     }
   };
 
-  // ✅ End election (still exists)
+  // ✅ End election
   endElection = async () => {
     try {
       await this.state.ElectionInstance.methods
@@ -120,16 +166,18 @@ export default class Home extends Component {
     }
   };
 
-  // ✅ Register + Start election (NEW contract functions)
+  // ✅ Register + Start election
   registerElection = async (data) => {
     try {
       const electionTitle = (data.electionTitle || "").trim();
       const orgTitle = (data.organizationTitle || "").trim();
 
-      // Build a description from the form (since old fields are not stored on-chain anymore)
-      const description = `Organization: ${orgTitle} | Admin: ${data.adminFName || ""} ${
-        data.adminLName || ""
-      } | Title: ${data.adminTitle || ""} | Email: ${data.adminEmail || ""}`;
+      const fullName = `${data.adminFName || ""} ${data.adminLName || ""}`.trim();
+
+      // Store as formatted description so it can be parsed for perfect alignment
+      const description = `Organization: ${orgTitle} | Admin: ${fullName} | Title: ${
+        data.adminTitle || ""
+      } | Email: ${data.adminEmail || ""}`;
 
       // 1) set name + description
       await this.state.ElectionInstance.methods
@@ -188,10 +236,7 @@ export default class Home extends Component {
             <center>
               <h3>The Election ended.</h3>
               <br />
-              <Link
-                to="/Results"
-                style={{ color: "black", textDecoration: "underline" }}
-              >
+              <Link to="/Results" style={{ color: "black", textDecoration: "underline" }}>
                 See results
               </Link>
             </center>
@@ -241,10 +286,7 @@ export default class Home extends Component {
                     </label>
 
                     <label className="label-home">
-                      Email{" "}
-                      {errors.adminEmail && (
-                        <EMsg msg={errors.adminEmail.message} />
-                      )}
+                      Email {errors.adminEmail && <EMsg msg={errors.adminEmail.message} />}
                       <input
                         className="input-home"
                         placeholder="you@example.com"
@@ -259,8 +301,7 @@ export default class Home extends Component {
                     </label>
 
                     <label className="label-home">
-                      Job Title or Position{" "}
-                      {errors.adminTitle && <EMsg msg="*required" />}
+                      Job Title or Position {errors.adminTitle && <EMsg msg="*required" />}
                       <input
                         className="input-home"
                         type="text"
@@ -311,10 +352,7 @@ export default class Home extends Component {
             endElFn={this.endElection}
           />
 
-          <ElectionStatus
-            elStarted={this.state.elStarted}
-            elEnded={this.state.elEnded}
-          />
+          <ElectionStatus elStarted={this.state.elStarted} elEnded={this.state.elEnded} />
         </form>
       );
     };

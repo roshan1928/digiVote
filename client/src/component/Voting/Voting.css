@@ -59,3 +59,24 @@ p {
     height: 100%;
   }
 }
+
+.candidate-meta {
+  margin: 7px 0;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.meta-label {
+  min-width: 140px;   /* aligns all labels */
+  color: #09191c;     /* green like symbol */
+  font-weight: 700;
+}
+
+.meta-value {
+  color: #000;
+}

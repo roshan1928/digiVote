@@ -10,6 +10,8 @@ import Results from "./component/Results/Results";
 import Registration from "./component/Registration/Registration";
 import AddCandidate from "./component/Admin/AddCandidate/AddCandidate";
 import Verification from "./component/Admin/Verification/Verification";
+import Report from "./component/Admin/Report/Report";
+
 import test from "./component/test";
 import Footer from "./component/Footer/Footer";
 
@@ -37,11 +39,16 @@ export default class App extends Component {
 
       console.log("✅ Web3 loaded");
       console.log("Detected Network ID:", networkId);
-      console.log("Available networks in contract:", Object.keys(Election.networks));
+      console.log(
+        "Available networks in contract:",
+        Object.keys(Election.networks)
+      );
 
       this.setState({ web3, accounts, contract, networkId });
     } catch (error) {
-      alert("⚠️ Failed to load Web3, accounts, or contract. Check console for details.");
+      alert(
+        "⚠️ Failed to load Web3, accounts, or contract. Check console for details."
+      );
       console.error(error);
     }
   }
@@ -52,15 +59,27 @@ export default class App extends Component {
         <Router>
           <Switch>
             <Route exact path="/" component={Home} />
+
+            {/* Admin */}
             <Route exact path="/AddCandidate" component={AddCandidate} />
+            <Route exact path="/Verification" component={Verification} />
+
+            {/* Voter */}
+            <Route exact path="/Registration" component={Registration} />
             <Route exact path="/Voting" component={Voting} />
             <Route exact path="/Results" component={Results} />
-            <Route exact path="/Registration" component={Registration} />
-            <Route exact path="/Verification" component={Verification} />
+
+            {/* ✅ Report (NEW) */}
+            <Route exact path="/Report" component={Report} />
+
+            {/* Other */}
             <Route exact path="/test" component={test} />
+
+            {/* 404 */}
             <Route exact path="*" component={NotFound} />
           </Switch>
         </Router>
+
         <Footer />
       </div>
     );
@@ -77,10 +96,7 @@ class NotFound extends Component {
             The page you are looking for doesn't exist.
             <br />
             Go to{" "}
-            <Link
-              to="/"
-              style={{ color: "black", textDecoration: "underline" }}
-            >
+            <Link to="/" style={{ color: "black", textDecoration: "underline" }}>
               Home
             </Link>
           </p>

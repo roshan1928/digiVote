@@ -41,6 +41,7 @@ export default class Voting extends Component {
   }
 
   componentDidMount = async () => {
+    // Refresh once
     if (!window.location.hash) {
       window.location = window.location + "#loaded";
       window.location.reload();
@@ -69,20 +70,24 @@ export default class Voting extends Component {
         account: accounts[0],
       });
 
-      // ✅ NEW ABI
       const candidateCount = await instance.methods.candidateCount().call();
       const start = await instance.methods.start().call();
       const end = await instance.methods.end().call();
       const admin = await instance.methods.admin().call();
 
+      const isAdmin = accounts[0].toLowerCase() === admin.toLowerCase();
+
       this.setState({
         candidateCount: Number(candidateCount),
         isElStarted: start,
         isElEnded: end,
-        isAdmin: accounts[0].toLowerCase() === admin.toLowerCase(),
+        isAdmin,
       });
 
-      // ✅ Load candidates (new fields)
+      // ✅ If admin, stop here (do NOT load voter data / candidates for voting)
+      if (isAdmin) return;
+
+      // Load candidates
       const candidates = [];
       for (let i = 0; i < Number(candidateCount); i++) {
         const c = await instance.methods.candidateDetails(i).call();
@@ -90,7 +95,7 @@ export default class Voting extends Component {
           id: Number(c.candidateId),
           name: c.name,
           party: c.party,
-          symbol: c.symbol, // "tree.png"
+          symbol: c.symbol, // e.g. "tree.png"
           age: Number(c.age),
           gender: c.gender,
           region: c.region,
@@ -98,7 +103,7 @@ export default class Voting extends Component {
       }
       this.setState({ candidates });
 
-      // ✅ Load current voter
+      // Load current voter
       const voter = await instance.methods.voterDetails(accounts[0]).call();
       this.setState({
         currentVoter: {
@@ -118,9 +123,16 @@ export default class Voting extends Component {
 
   castVote = async (id) => {
     try {
+      // ✅ Extra safety: Admin cannot vote
+      if (this.state.isAdmin) {
+        alert("Admin account cannot vote.");
+        return;
+      }
+
       await this.state.ElectionInstance.methods
         .vote(id)
         .send({ from: this.state.account, gas: 1000000 });
+
       window.location.reload();
     } catch (err) {
       console.error(err);
@@ -129,6 +141,12 @@ export default class Voting extends Component {
   };
 
   confirmVote = (id, name) => {
+    // ✅ Extra safety: Admin cannot vote
+    if (this.state.isAdmin) {
+      alert("Admin account cannot vote.");
+      return;
+    }
+
     const r = window.confirm(`Vote for ${name} (ID ${id})?\nAre you sure?`);
     if (r === true) {
       this.castVote(id);
@@ -148,33 +166,48 @@ export default class Voting extends Component {
             {candidate.name} <small>#{candidate.id}</small>
           </h2>
 
-          <p className="slogan">
-            <strong>Party:</strong> {candidate.party} <br />
-            <strong>Region:</strong> {candidate.region} <br />
-            <strong>Gender/Age:</strong> {candidate.gender}, {candidate.age}
-          </p>
+          {/* ✅ Aligned rows (label color controlled from CSS) */}
+          <div className="candidate-meta">
+            <div className="meta-row">
+              <span className="meta-label">Party:</span>
+              <span className="meta-value">{candidate.party}</span>
+            </div>
 
-          {/* ✅ Symbol Image ONLY (no filename text) */}
-          <div style={{ marginTop: "10px" }}>
-            <strong>Symbol:</strong>{" "}
-            {candidate.symbol ? (
-              <img
-                src={`/symbols/${candidate.symbol}`}
-                alt="symbol"
-                style={{
-                  width: "60px",
-                  height: "60px",
-                  objectFit: "contain",
-                  marginLeft: "10px",
-                  verticalAlign: "middle",
-                }}
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            ) : (
-              <span>N/A</span>
-            )}
+            <div className="meta-row">
+              <span className="meta-label">Region:</span>
+              <span className="meta-value">{candidate.region}</span>
+            </div>
+
+            <div className="meta-row">
+              <span className="meta-label">Gender/Age:</span>
+              <span className="meta-value">
+                {candidate.gender}, {candidate.age}
+              </span>
+            </div>
+
+            <div className="meta-row">
+              <span className="meta-label">Symbol:</span>
+              <span className="meta-value">
+                {candidate.symbol ? (
+                  <img
+                    src={`/symbols/${candidate.symbol}`}
+                    alt="symbol"
+                    style={{
+                      width: "60px",
+                      height: "60px",
+                      objectFit: "contain",
+                      marginLeft: "10px",
+                      verticalAlign: "middle",
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <span>N/A</span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -197,6 +230,38 @@ export default class Voting extends Component {
         <>
           {this.state.isAdmin ? <NavbarAdmin /> : <Navbar />}
           <center>Loading Web3, accounts, and contract...</center>
+        </>
+      );
+    }
+
+    // ✅ Admin block UI (if admin visits /Voting manually)
+    if (this.state.isAdmin) {
+      return (
+        <>
+          <NavbarAdmin />
+          <div className="container-main">
+            <div className="container-item attention" style={{ display: "block" }}>
+              <center>
+                <h2>Admin account cannot vote</h2>
+                <p>Voting is disabled for Admin in this system.</p>
+                <br />
+                <Link
+                  to="/Report"
+                  style={{ color: "black", textDecoration: "underline" }}
+                >
+                  Go to Report
+                </Link>
+                <br />
+                <br />
+                <Link
+                  to="/Results"
+                  style={{ color: "black", textDecoration: "underline" }}
+                >
+                  See Results
+                </Link>
+              </center>
+            </div>
+          </div>
         </>
       );
     }
